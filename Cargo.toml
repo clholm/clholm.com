@@ -1,0 +1,7 @@
+[package]
+name = "web"
+version = "0.1.0"
+authors = ["connor <clholm@umich.edu>"]
+
+[dependencies]
+stdweb = "0.4.8"
