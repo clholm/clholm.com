@@ -4,6 +4,7 @@ extern crate stdweb;
 use stdweb::web:: {
     document,
     IParentNode,
+    INode,
     IElement,
     Element,
 };
@@ -16,23 +17,43 @@ use stdweb::unstable::TryInto;
 struct Paragraph {
     // raw html that includes attributes of <p> tag
     // ex. 
-    //  <p>
+    //  <p >
     //      <span>hello</span> <span>world</world>
     //  </p>
-    pub rawHtml: &str,
+    pub raw_html: String,
 }
 
 impl Paragraph {
     // constructor, takes raw html that belongs inside <p> tag
     // and attributes
-    pub fn new(html: &str, attributes: String) -> Paragraph {
+    pub fn new(attributes: String, html: String) -> Paragraph {
         Paragraph {
-            rawHtml: format!("<p {}>\n{}\n</p>", attributes, html),
+            raw_html: format!("<p {}>\n\t{}\n</p>", attributes, html),
         }
     }
 }
 
 // span struct
+struct Span {
+    // raw html that includes inserted span tag
+    // ex. 
+    // <span>Hello</span>World<span>
+    pub raw_html: String,
+}
+
+impl Span {
+    // constructor, takes text inside <p> tag and inserts a <span>
+    // between whitespace
+    // pub fn new(text: String) -> Span {
+    //     for c in paragraph_text.chars() {
+            
+    //     }
+    //     Span {
+    //         raw_html: format!("<p {}>\n\t{}\n</p>", attributes, html),
+    //     }
+    // }
+}
+
 
 // flag for preprocess mode (will split text by whitespace and add spans)
 // todo: turn into enum if needed
@@ -65,16 +86,20 @@ fn perform_preprocess() {
     for paragraph in &paragraphs {
         // retreive text from paragraph
         let paragraph_text = paragraph.text_content().unwrap();
-        // for c in paragraph_text.chars() {
-
-        // }
-        // let paragraph: IElement = paragraph.try_from();
         let paragraph: Element = paragraph.try_into().unwrap();
-        let attr = get_attributes(paragraph);
-        let paragraph_html: Paragraph = Paragraph.new(paragraph_text, attr);
-        js! {
-            console.log(@{paragraph_html});
-        };
+        // let attr = get_attributes(paragraph);
+        if let Some(attr) = get_attributes(paragraph) {
+            let paragraph_html: Paragraph = Paragraph::new(attr, paragraph_text);
+            js! {
+                console.log(@{paragraph_html.raw_html});
+            };
+        }
+        else {
+            let paragraph_html: Paragraph = Paragraph::new("".to_string(), paragraph_text);
+            js! {
+                console.log(@{paragraph_html.raw_html});
+            };
+        }
     }
 }
 
