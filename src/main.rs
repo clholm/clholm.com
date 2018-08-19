@@ -1,9 +1,9 @@
-#[macro_use]
 extern crate stdweb;
 extern crate regex;
 
 use stdweb::web:: {
     document,
+    Node,
     IParentNode,
     INode,
     IElement,
@@ -63,7 +63,7 @@ impl ProcessedText {
         for cap in reg.captures_iter(&html) {
             span_text.push_str(
                 &format!(
-                    "<span class=\"phys-obj phys-id-{}\">{}</span>)", obj_count, &cap[0]
+                    "<span class=\"phys-obj phys-id-{}\">{}</span>", obj_count, &cap[0]
                 )
             );
             *obj_count += 1;
@@ -82,7 +82,7 @@ fn formatted_paragraph_factory(attrs: Option<String>,
 }
 
 // returns attributes of a elt as a string option
-fn get_attributes(elt: Element) -> Option<String> {
+fn get_attributes(elt: &Element) -> Option<String> {
     // retrieve attribute names and find their values
     let attr_names = elt.get_attribute_names();
     let mut ret = String::new();
@@ -113,10 +113,15 @@ fn perform_preprocess(obj_count: &mut u32) {
         // process text and attributes in order to replace paragraph
         // object on page
         let replacement: Paragraph = formatted_paragraph_factory(
-            get_attributes(paragraph),
+            get_attributes(&paragraph),
             paragraph_text,
             obj_count
-        );  
+        );
+        // create node from raw html
+        let repl_node: Node = Node::from_html(&replacement.raw_html).unwrap();
+        // find parent and replace this node
+        let papi: Node = paragraph.parent_node().unwrap();
+        papi.replace_child(&repl_node, &paragraph).unwrap();
     }
 }
 
@@ -129,8 +134,4 @@ fn main() {
     }
     // if preprocess, split text by whitespace (or anchor tag) and add
     // spans
-
-    // js! {
-    //     @{body}.style = "background-color: pink;" 
-    // };
 }
