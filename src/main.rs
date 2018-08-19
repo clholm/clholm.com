@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate stdweb;
+extern crate regex;
 
 use stdweb::web:: {
     document,
@@ -8,9 +9,12 @@ use stdweb::web:: {
     IElement,
     Element,
 };
+use stdweb::unstable::TryInto; // only used until rust::TryInto is stabilized
+use regex::Regex;
 
-// only used until rust::TryInto is stabilized
-use stdweb::unstable::TryInto;
+// flag for preprocess mode (will split text by whitespace and add spans)
+// todo: turn into enum if needed
+static PREPROCESS: bool = true;
 
 // STRUCTS
 // paragraph struct
@@ -25,39 +29,57 @@ struct Paragraph {
 
 impl Paragraph {
     // constructor, takes raw html that belongs inside <p> tag
-    // and attributes
-    pub fn new(attributes: String, html: String) -> Paragraph {
-        Paragraph {
-            raw_html: format!("<p {}>\n\t{}\n</p>", attributes, html),
+    // and attributes (if there are any)
+    pub fn new(attrs_option: Option<String>, html: String) -> Paragraph {
+        if let Some(attrs) = attrs_option {
+            Paragraph {
+                raw_html: format!("<p {}>\n\t{}\n</p>", attrs, html),
+            }
+        }
+        else {
+            Paragraph {
+                raw_html: format!("<p>\n\t{}\n</p>", html),
+            }
         }
     }
 }
 
-// span struct
-struct Span {
+// struct for text that has <span>s inserted
+struct ProcessedText {
     // raw html that includes inserted span tag
     // ex. 
     // <span>Hello</span>World<span>
     pub raw_html: String,
 }
 
-impl Span {
+impl ProcessedText {
     // constructor, takes text inside <p> tag and inserts a <span>
     // between whitespace
-    // pub fn new(text: String) -> Span {
-    //     for c in paragraph_text.chars() {
-            
-    //     }
-    //     Span {
-    //         raw_html: format!("<p {}>\n\t{}\n</p>", attributes, html),
-    //     }
-    // }
+    pub fn new(html: String, obj_count: &mut u32) -> ProcessedText {
+        let mut span_text: String = String::new();
+        // groups by zero or more non-whitespace characters followed by
+        // one or more whitespace character
+        let reg = Regex::new(r"[^\s]*\s*").unwrap();
+        for cap in reg.captures_iter(&html) {
+            span_text.push_str(
+                &format!(
+                    "<span class=\"phys-obj phys-id-{}\">{}</span>)", obj_count, &cap[0]
+                )
+            );
+            *obj_count += 1;
+        }
+        ProcessedText {
+            raw_html: span_text,
+        }
+    }
 }
 
-
-// flag for preprocess mode (will split text by whitespace and add spans)
-// todo: turn into enum if needed
-static PREPROCESS: bool = true;
+// returns <p> with <span>s inserted
+fn formatted_paragraph_factory(attrs: Option<String>, 
+                               html: String, 
+                               obj_count: &mut u32) -> Paragraph {
+    Paragraph::new(attrs, ProcessedText::new(html, obj_count).raw_html)
+}
 
 // returns attributes of a elt as a string option
 fn get_attributes(elt: Element) -> Option<String> {
@@ -80,33 +102,30 @@ fn get_attributes(elt: Element) -> Option<String> {
 }
 
 // splits text by whitespace (or anchor tags) and adds spans
-fn perform_preprocess() {
+fn perform_preprocess(obj_count: &mut u32) {
     // find all paragraph tags
     let paragraphs = document().query_selector_all("p").unwrap();
     for paragraph in &paragraphs {
         // retreive text from paragraph
         let paragraph_text = paragraph.text_content().unwrap();
+        // retrieve paragraph element
         let paragraph: Element = paragraph.try_into().unwrap();
-        // let attr = get_attributes(paragraph);
-        if let Some(attr) = get_attributes(paragraph) {
-            let paragraph_html: Paragraph = Paragraph::new(attr, paragraph_text);
-            js! {
-                console.log(@{paragraph_html.raw_html});
-            };
-        }
-        else {
-            let paragraph_html: Paragraph = Paragraph::new("".to_string(), paragraph_text);
-            js! {
-                console.log(@{paragraph_html.raw_html});
-            };
-        }
+        // process text and attributes in order to replace paragraph
+        // object on page
+        let replacement: Paragraph = formatted_paragraph_factory(
+            get_attributes(paragraph),
+            paragraph_text,
+            obj_count
+        );  
     }
 }
 
 fn main() {
-    // retrieve body node
+    // initialize object count
+    let mut obj_count: u32 = 0;
+    // perform preprocess if necessary
     if PREPROCESS {
-        perform_preprocess();
+        perform_preprocess(&mut obj_count);
     }
     // if preprocess, split text by whitespace (or anchor tag) and add
     // spans
