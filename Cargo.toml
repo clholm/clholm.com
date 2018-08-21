@@ -6,3 +6,6 @@ authors = ["connor <clholm@umich.edu>"]
 [dependencies]
 stdweb = "0.4.8"
 regex = "1.0.2"
+nalgebra = "0.16.0"
+ncollide2d = "0.17.1"
+nphysics2d = "0.9.1"

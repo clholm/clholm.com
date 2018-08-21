@@ -1,3 +1,6 @@
+#![feature(type_ascription)]
+
+#[macro_use]
 extern crate stdweb;
 extern crate regex;
 
@@ -8,6 +11,7 @@ use stdweb::web:: {
     INode,
     IElement,
     Element,
+    HtmlElement,
 };
 use stdweb::unstable::TryInto; // only used until rust::TryInto is stabilized
 use regex::Regex;
@@ -120,8 +124,32 @@ fn perform_preprocess(obj_count: &mut u32) {
         // create node from raw html
         let repl_node: Node = Node::from_html(&replacement.raw_html).unwrap();
         // find parent and replace this node
-        let papi: Node = paragraph.parent_node().unwrap();
-        papi.replace_child(&repl_node, &paragraph).unwrap();
+        let parent: Node = paragraph.parent_node().unwrap();
+        parent.replace_child(&repl_node, &paragraph).unwrap();
+    }
+}
+
+// generates physics "world" by creating all necessary objects
+// and initializing all necessary params
+fn generate_world(obj_count: u32) {
+    // find height of body
+    let body = document().query_selector("body").unwrap();
+    body: HtmlElement = body.try_into().unwrap();
+    let body_height = body.offset_height();
+    js! {
+        console.log("body height is " + @{body_height});
+    }
+    // find each phys object
+    for i in 0..obj_count {
+        let obj = document().query_selector(&format!("phys-id-{}", i)).unwrap();
+        // cast obj to html element
+        obj: HtmlElement = obj.try_into().unwrap();
+        // get obj height, width, and position and console log it
+        let bounding_rect = obj.get_bounding_client_rect();
+        let bottom = bounding_rect.get_bottom();
+        let left = bounding_rect.get_left();
+        let obj_height = obj.offset_height();
+        let obj_width = obj.offset_width();
     }
 }
 
