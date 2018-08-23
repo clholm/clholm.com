@@ -11,6 +11,7 @@ use stdweb::web:: {
     INode,
     IElement,
     Element,
+    IHtmlElement,
     HtmlElement,
 };
 use stdweb::unstable::TryInto; // only used until rust::TryInto is stabilized
@@ -133,33 +134,44 @@ fn perform_preprocess(obj_count: &mut u32) {
 // and initializing all necessary params
 fn generate_world(obj_count: u32) {
     // find height of body
-    let body = document().query_selector("body").unwrap();
-    body: HtmlElement = body.try_into().unwrap();
-    let body_height = body.offset_height();
-    js! {
-        console.log("body height is " + @{body_height});
+    let body_finder = document().query_selector_all("body").unwrap();
+    let mut body_height = 0;
+    for body in body_finder { // should only be one body
+        let body: HtmlElement = body.try_into().unwrap();
+        body_height = body.offset_height();
     }
+    js! {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+        console.log("body height is " + @{body_height});
+    };
     // find each phys object
     for i in 0..obj_count {
-        let obj = document().query_selector(&format!("phys-id-{}", i)).unwrap();
-        // cast obj to html element
-        obj: HtmlElement = obj.try_into().unwrap();
+        // retrieve object with query_selector_all, used query_selector_all
+        // for type reasons, there will only be one node in the returned nodelist
+        let obj_finder = document().query_selector_all(&format!(".phys-id-{}", i)).unwrap();
+        let obj: HtmlElement = obj_finder.item(0).unwrap().try_into().unwrap();
         // get obj height, width, and position and console log it
         let bounding_rect = obj.get_bounding_client_rect();
         let bottom = bounding_rect.get_bottom();
         let left = bounding_rect.get_left();
         let obj_height = obj.offset_height();
         let obj_width = obj.offset_width();
+        js! {
+            console.log("obj " + @{i} + " bottom: " + @{bottom});
+            console.log("obj " + @{i} + " left: " + @{left});
+            console.log("obj " + @{i} + " height: " + @{obj_height});
+            console.log("obj " + @{i} + " width: " + @{obj_width});
+        };
     }
 }
 
 fn main() {
     // initialize object count
     let mut obj_count: u32 = 0;
-    // perform preprocess if necessary
+    // if preprocess, split text by whitespace (or anchor tag) and add
+    // spans
     if PREPROCESS {
         perform_preprocess(&mut obj_count);
     }
-    // if preprocess, split text by whitespace (or anchor tag) and add
-    // spans
+    // generate physics world, find height of each text object
+    generate_world(obj_count);
 }
