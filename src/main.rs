@@ -149,17 +149,17 @@ fn generate_world(obj_count: u32) {
         // for type reasons, there will only be one node in the returned nodelist
         let obj_finder = document().query_selector_all(&format!(".phys-id-{}", i)).unwrap();
         let obj: HtmlElement = obj_finder.item(0).unwrap().try_into().unwrap();
-        // get obj height, width, and position and console log it
+        // retrieve object attributes
         let bounding_rect = obj.get_bounding_client_rect();
+        // object's y position is body_height - bottom 
         let bottom = bounding_rect.get_bottom();
-        let left = bounding_rect.get_left();
+        let y_pos = (body_height as f64) - bottom;
+        let x_pos = bounding_rect.get_left();
         let obj_height = obj.offset_height();
         let obj_width = obj.offset_width();
         js! {
-            console.log("obj " + @{i} + " bottom: " + @{bottom});
-            console.log("obj " + @{i} + " left: " + @{left});
-            console.log("obj " + @{i} + " height: " + @{obj_height});
-            console.log("obj " + @{i} + " width: " + @{obj_width});
+            console.log("obj " + @{i} + " x pos:  " + @{x_pos});
+            console.log("obj " + @{i} + " y pos: " + @{y_pos});
         };
     }
 }
