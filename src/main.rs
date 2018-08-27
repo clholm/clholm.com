@@ -3,7 +3,17 @@
 #[macro_use]
 extern crate stdweb;
 extern crate regex;
+extern crate nalgebra as na;
+extern crate ncollide2d;
+extern crate nphysics2d;
 
+// use statements for nphysics
+use na::{Isometry2, Point2, Vector2};
+use ncollide2d::shape::{Cuboid, ShapeHandle};
+use nphysics2d::object::{BodyHandle, ColliderHandle, Material};
+use nphysics2d::volumetric::Volumetric;
+use nphysics2d::world::World;
+// use statements for stdweb
 use stdweb::web:: {
     document,
     Node,
@@ -79,10 +89,19 @@ impl ProcessedText {
     }
 }
 
+// struct that holds all information for an individual text object
+// in the physics world (obj number, rigid body handle, collider handle)
+struct TextNode {
+    pub obj_id: u32,
+    pub body_handle: BodyHandle,
+    pub collider_handle: ColliderHandle,
+}
+
 // returns <p> with <span>s inserted
-fn formatted_paragraph_factory(attrs: Option<String>, 
-                               html: String, 
-                               obj_count: &mut u32) -> Paragraph {
+fn formatted_paragraph_factory(
+    attrs: Option<String>,
+    html: String,
+    obj_count: &mut u32) -> Paragraph {
     Paragraph::new(attrs, ProcessedText::new(html, obj_count).raw_html)
 }
 
