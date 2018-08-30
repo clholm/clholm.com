@@ -8,7 +8,7 @@ extern crate ncollide2d;
 extern crate nphysics2d;
 
 // use statements for nphysics
-use na::{Isometry2, Point2, Vector2, Real};
+use na::{Isometry2, Vector2};
 use ncollide2d::shape::{Cuboid, ShapeHandle};
 use nphysics2d::object::{BodyHandle, ColliderHandle, Material};
 use nphysics2d::volumetric::Volumetric;
@@ -76,12 +76,16 @@ impl ProcessedText {
         // one or more whitespace character
         let reg = Regex::new(r"[^\s]*\s*").unwrap();
         for cap in reg.captures_iter(&html) {
-            span_text.push_str(
-                &format!(
-                    "<span class=\"phys-obj phys-id-{}\">{}</span>", obj_count, &cap[0]
-                )
-            );
-            *obj_count += 1;
+            // if captured text isn't just whitespace
+            // TODO: report error if website all whitespace
+            if &cap[0].split_whitespace().count() > &0 {
+                span_text.push_str(
+                    &format!(
+                        "<span class=\"phys-obj phys-id-{}\">{}</span>", obj_count, &cap[0]
+                    )
+                );
+                *obj_count += 1;
+            }
         }
         ProcessedText {
             raw_html: span_text,
@@ -175,10 +179,6 @@ impl Realm {
             let y_pos = -bottom as f64 + obj_half_height;
             // object's x position is left + obj_half_width
             let x_pos = left + obj_half_width;
-            js! {
-                console.log("obj " + @{i} + " x pos:  " + @{x_pos});
-                console.log("obj " + @{i} + " y pos: " + @{y_pos});
-            };
             // create shape of object from half heights and widths and retrieve
             // properties from shape handle
             let shape = ShapeHandle::new(Cuboid::new(Vector2::new(
@@ -193,7 +193,7 @@ impl Realm {
             // add collider to world and attach to above rigid body
             let collider_handle = world.add_collider(
                 COLLIDER_MARGIN,
-                shape,
+                shape.clone(),
                 body_handle,
                 Isometry2::identity(),
                 Material::default(),
