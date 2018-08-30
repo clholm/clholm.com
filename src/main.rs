@@ -205,7 +205,7 @@ impl Realm {
         Realm {
             world: world,
             text_nodes: text_node_vec,
-            ground: ground_handle,   
+            ground: ground_handle,
         }
     }
 }
