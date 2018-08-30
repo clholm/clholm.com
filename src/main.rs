@@ -8,7 +8,7 @@ extern crate ncollide2d;
 extern crate nphysics2d;
 
 // use statements for nphysics
-use na::{Isometry2, Point2, Vector2};
+use na::{Isometry2, Point2, Vector2, Real};
 use ncollide2d::shape::{Cuboid, ShapeHandle};
 use nphysics2d::object::{BodyHandle, ColliderHandle, Material};
 use nphysics2d::volumetric::Volumetric;
@@ -90,11 +90,124 @@ impl ProcessedText {
 }
 
 // struct that holds all information for an individual text object
-// in the physics world (obj number, rigid body handle, collider handle)
+// in the physics world (rigid body handle, collider handle)
 struct TextNode {
-    pub obj_id: u32,
     pub body_handle: BodyHandle,
     pub collider_handle: ColliderHandle,
+}
+
+impl TextNode {
+    // constructor
+    pub fn new(in_body_handle: BodyHandle, in_collider_handle: ColliderHandle) -> TextNode {
+        TextNode {
+            body_handle: in_body_handle,
+            collider_handle: in_collider_handle,
+        }
+    }
+}
+
+// struct Realm contains the World that drives the physics engine and the vector
+// of TextNodes that populates that World
+struct Realm {
+    pub world: World<f64>,
+    pub text_nodes: Vec<TextNode>,
+    pub ground: ColliderHandle,
+}
+
+impl Realm {
+    // constructs Realm by creating World struct and populating text_ndoes vec
+    pub fn new(obj_count: u32) -> Realm {
+        // margin that the collision engine will use
+        const COLLIDER_MARGIN: f64 = 0.01;
+        // create nphysics world
+        let mut world = World::new();
+        world.set_gravity(Vector2::new(0.0, -9.81));
+        // find height and width of body for the ground of the world
+        let body_finder = document().query_selector_all("body").unwrap();
+        let mut body_height = 0;
+        let mut body_width = 0;
+        for body in body_finder { // should only be one body
+            let body: HtmlElement = body.try_into().unwrap();
+            body_height = body.offset_height();
+            body_width = body.offset_width();
+        }
+        // create ground object in physics world
+        // create ground shape handle
+        let ground_half_height: f64 = 0.5;
+        let ground_shape = ShapeHandle::new(Cuboid::new(Vector2::new(
+            (body_width as f64) / 2.0 - COLLIDER_MARGIN,
+            ground_half_height - COLLIDER_MARGIN,
+        )));
+        // ground is located at the bottom of the page, where 0 is top of page
+        // and -body height is the bottom of the page (thus page is located entirely in
+        // 4th quadrant)
+        let ground_y_pos = -(body_height as f64) - ground_half_height * 2.0;
+        js! {
+            console.log("ground_y_pos: " + @{ground_y_pos});
+        }
+        let ground_pos = Isometry2::new(Vector2::y() * ground_y_pos, na::zero());
+        // add ground collider to world 
+        let ground_handle = world.add_collider(
+            COLLIDER_MARGIN,
+            ground_shape,
+            BodyHandle::ground(),
+            ground_pos,
+            Material::default(),
+        );
+        // create vector to hold all TextNodes
+        let mut text_node_vec: Vec<TextNode> = Vec::with_capacity(obj_count as usize);
+        // find each span with text and create a TextNode from it
+        for i in 0..obj_count {
+            // retrieve object with query_selector_all, used query_selector_all
+            // for type reasons, there will only be one node in the returned nodelist
+            let obj_finder = document().query_selector_all(&format!(".phys-id-{}", i)).unwrap();
+            let obj: HtmlElement = obj_finder.item(0).unwrap().try_into().unwrap();
+            // retrieve object attributes
+            let bounding_rect = obj.get_bounding_client_rect();
+            let bottom = bounding_rect.get_bottom();
+            let left = bounding_rect.get_left();
+            let obj_height = obj.offset_height();
+            let obj_width = obj.offset_width();
+            // calculate object's half extents and position
+            let obj_half_height = obj_height as f64 / 2.0;
+            let obj_half_width = obj_width as f64 / 2.0;
+            // object's y position is -bottom + obj_half_height
+            let y_pos = -bottom as f64 + obj_half_height;
+            // object's x position is left + obj_half_width
+            let x_pos = left + obj_half_width;
+            js! {
+                console.log("obj " + @{i} + " x pos:  " + @{x_pos});
+                console.log("obj " + @{i} + " y pos: " + @{y_pos});
+            };
+            // create shape of object from half heights and widths and retrieve
+            // properties from shape handle
+            let shape = ShapeHandle::new(Cuboid::new(Vector2::new(
+                obj_half_width - COLLIDER_MARGIN,
+                obj_half_height - COLLIDER_MARGIN,
+            )));
+            let inertia = shape.inertia(1.0);
+            let center_of_mass = shape.center_of_mass();
+            let pos = Isometry2::new(Vector2::new(x_pos, y_pos), 0.0);
+            // add rigid body to world
+            let body_handle = world.add_rigid_body(pos, inertia, center_of_mass);
+            // add collider to world and attach to above rigid body
+            let collider_handle = world.add_collider(
+                COLLIDER_MARGIN,
+                shape,
+                body_handle,
+                Isometry2::identity(),
+                Material::default(),
+            );
+            // create a text node from this object and push it into the text_node_vec
+            text_node_vec.push(TextNode::new(body_handle, collider_handle));
+        }
+        // build and return the Realm!
+        Realm {
+            world: world,
+            text_nodes: text_node_vec,
+            ground: ground_handle,   
+        }
+    }
 }
 
 // returns <p> with <span>s inserted
@@ -149,40 +262,6 @@ fn perform_preprocess(obj_count: &mut u32) {
     }
 }
 
-// generates physics "world" by creating all necessary objects
-// and initializing all necessary params
-fn generate_world(obj_count: u32) {
-    // find height of body
-    let body_finder = document().query_selector_all("body").unwrap();
-    let mut body_height = 0;
-    for body in body_finder { // should only be one body
-        let body: HtmlElement = body.try_into().unwrap();
-        body_height = body.offset_height();
-    }
-    js! {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
-        console.log("body height is " + @{body_height});
-    };
-    // find each phys object
-    for i in 0..obj_count {
-        // retrieve object with query_selector_all, used query_selector_all
-        // for type reasons, there will only be one node in the returned nodelist
-        let obj_finder = document().query_selector_all(&format!(".phys-id-{}", i)).unwrap();
-        let obj: HtmlElement = obj_finder.item(0).unwrap().try_into().unwrap();
-        // retrieve object attributes
-        let bounding_rect = obj.get_bounding_client_rect();
-        // object's y position is body_height - bottom 
-        let bottom = bounding_rect.get_bottom();
-        let y_pos = (body_height as f64) - bottom;
-        let x_pos = bounding_rect.get_left();
-        let obj_height = obj.offset_height();
-        let obj_width = obj.offset_width();
-        js! {
-            console.log("obj " + @{i} + " x pos:  " + @{x_pos});
-            console.log("obj " + @{i} + " y pos: " + @{y_pos});
-        };
-    }
-}
-
 fn main() {
     // initialize object count
     let mut obj_count: u32 = 0;
@@ -191,6 +270,6 @@ fn main() {
     if PREPROCESS {
         perform_preprocess(&mut obj_count);
     }
-    // generate physics world, find height of each text object
-    generate_world(obj_count);
+    // create Realm
+    let realm = Realm::new(obj_count);
 }
