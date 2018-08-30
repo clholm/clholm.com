@@ -146,9 +146,6 @@ impl Realm {
         // and -body height is the bottom of the page (thus page is located entirely in
         // 4th quadrant)
         let ground_y_pos = -(body_height as f64) - ground_half_height * 2.0;
-        js! {
-            console.log("ground_y_pos: " + @{ground_y_pos});
-        }
         let ground_pos = Isometry2::new(Vector2::y() * ground_y_pos, na::zero());
         // add ground collider to world 
         let ground_handle = world.add_collider(
