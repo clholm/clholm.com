@@ -8,3 +8,8 @@ html, body {
 #top-text {
     margin-top: 0;
 }
+
+/* styles for objects in Realm */
+.phys-obj {
+    position: relative;
+}

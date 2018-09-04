@@ -8,7 +8,11 @@ extern crate ncollide2d;
 extern crate nphysics2d;
 
 // use statements for nphysics
-use na::{Isometry2, Vector2};
+use na::{
+    Isometry2,
+    Vector2,
+    Matrix6,
+};
 use ncollide2d::shape::{Cuboid, ShapeHandle};
 use nphysics2d::object::{BodyHandle, ColliderHandle, Material};
 use nphysics2d::volumetric::Volumetric;
@@ -16,6 +20,7 @@ use nphysics2d::world::World;
 // use statements for stdweb
 use stdweb::web:: {
     document,
+    Window,
     Node,
     IParentNode,
     INode,
@@ -98,14 +103,25 @@ impl ProcessedText {
 struct TextNode {
     pub body_handle: BodyHandle,
     pub collider_handle: ColliderHandle,
+    pub half_width: f64,
+    pub half_height: f64,
+    pub id: u32,
 }
 
 impl TextNode {
     // constructor
-    pub fn new(in_body_handle: BodyHandle, in_collider_handle: ColliderHandle) -> TextNode {
+    pub fn new(
+        in_body_handle: BodyHandle,
+        in_collider_handle: ColliderHandle,
+        in_half_width: f64,
+        in_half_height: f64,
+        in_id: u32) -> TextNode {
         TextNode {
             body_handle: in_body_handle,
             collider_handle: in_collider_handle,
+            half_width: in_half_width,
+            half_height: in_half_height,
+            id: in_id,
         }
     }
 }
@@ -128,25 +144,24 @@ impl Realm {
         world.set_gravity(Vector2::new(0.0, -9.81));
         // find height and width of body for the ground of the world
         let body_finder = document().query_selector_all("body").unwrap();
-        let mut body_height = 0;
-        let mut body_width = 0;
+        let mut body_height = 0.0;
+        let mut body_width = 0.0;
         for body in body_finder { // should only be one body
             let body: HtmlElement = body.try_into().unwrap();
-            body_height = body.offset_height();
-            body_width = body.offset_width();
+            body_height = body.offset_height() as f64;
+            body_width = body.offset_width() as f64;
         }
         // create ground object in physics world
         // create ground shape handle
         let ground_half_height: f64 = 0.5;
         let ground_shape = ShapeHandle::new(Cuboid::new(Vector2::new(
-            (body_width as f64) / 2.0 - COLLIDER_MARGIN,
+            body_width as f64 - COLLIDER_MARGIN,
             ground_half_height - COLLIDER_MARGIN,
         )));
-        // ground is located at the bottom of the page, where 0 is top of page
-        // and -body height is the bottom of the page (thus page is located entirely in
-        // 4th quadrant)
-        let ground_y_pos = -(body_height as f64) - ground_half_height * 2.0;
-        let ground_pos = Isometry2::new(Vector2::y() * ground_y_pos, na::zero());
+        // ground is centered at (0, 0), extends from -body_width to body_width
+        // second quadrant will not be used, but this allows us to pass the text
+        // object's position wrt ground directly to the browser
+        let ground_pos = Isometry2::new(Vector2::zeros(), na::zero());
         // add ground collider to world 
         let ground_handle = world.add_collider(
             COLLIDER_MARGIN,
@@ -165,15 +180,15 @@ impl Realm {
             let obj: HtmlElement = obj_finder.item(0).unwrap().try_into().unwrap();
             // retrieve object attributes
             let bounding_rect = obj.get_bounding_client_rect();
-            let bottom = bounding_rect.get_bottom();
+            let top = bounding_rect.get_top();
             let left = bounding_rect.get_left();
             let obj_height = obj.offset_height();
             let obj_width = obj.offset_width();
             // calculate object's half extents and position
             let obj_half_height = obj_height as f64 / 2.0;
             let obj_half_width = obj_width as f64 / 2.0;
-            // object's y position is -bottom + obj_half_height
-            let y_pos = -bottom as f64 + obj_half_height;
+            // object's y position is body_height - top - obj_half_height
+            let y_pos = body_height - top as f64 - obj_half_height;
             // object's x position is left + obj_half_width
             let x_pos = left + obj_half_width;
             // create shape of object from half heights and widths and retrieve
@@ -190,19 +205,68 @@ impl Realm {
             // add collider to world and attach to above rigid body
             let collider_handle = world.add_collider(
                 COLLIDER_MARGIN,
-                shape.clone(),
+                shape,
                 body_handle,
                 Isometry2::identity(),
                 Material::default(),
             );
             // create a text node from this object and push it into the text_node_vec
-            text_node_vec.push(TextNode::new(body_handle, collider_handle));
+            text_node_vec.push(
+                TextNode::new(
+                    body_handle,
+                    collider_handle,
+                    obj_half_width,
+                    obj_half_height,
+                    i
+                )
+            );
         }
         // build and return the Realm!
         Realm {
             world: world,
             text_nodes: text_node_vec,
             ground: ground_handle,
+        }
+    }
+    // after nphysics has computed a step, update positions of text
+    // elements accordingly
+    pub fn render_step(self) {
+        for node in self.text_nodes {
+            // retrieve position of rigid body wrt ground from nphysics
+            // (if it exists)
+            if let Some(rigid_body) = self.world.rigid_body(node.body_handle) {
+                let pos = rigid_body.position();
+                let x_pos = pos.translation.vector[0] - node.half_width;
+                let y_pos = pos.translation.vector[1] - node.half_height;
+                // pos also contains object's rotation, retrieve that as matrix
+                let mut rot_mtrx = pos.rotation.to_homogeneous();
+                // nphysics convention - rot angle counterclockwise
+                // browser convention - rot angle clockwise
+                // swap (0, 1) and (1, 0) cells in matrix to convert nphysics
+                // rotation matrix to browser rotation matrix
+                rot_mtrx.swap((0, 1), (1, 0));
+                // iterate through matrix, retrieve values to pass to browser
+                let mut rot_container: Vec<f64> = Vec::with_capacity(6);
+                for &elt in rot_mtrx.iter() {
+                    rot_container.push(elt);
+                }
+                // find the object and update position
+                let elt: Element = document()
+                    .query_selector(&format!(".phys-id-{}", node.id))
+                    .unwrap()
+                    .unwrap();
+                elt.set_attribute("style", &format!(
+                    "left: {}; top: {}; transform: matrix({}, {}, {}, {}, {}, {});",
+                    x_pos,
+                    y_pos,
+                    rot_container[0],
+                    rot_container[1],
+                    rot_container[2],
+                    rot_container[3],
+                    rot_container[4],
+                    rot_container[5],
+                )).unwrap();
+            }
         }
     }
 }
