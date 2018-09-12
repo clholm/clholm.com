@@ -11,7 +11,6 @@ extern crate nphysics2d;
 use na::{
     Isometry2,
     Vector2,
-    Matrix6,
 };
 use ncollide2d::shape::{Cuboid, ShapeHandle};
 use nphysics2d::object::{BodyHandle, ColliderHandle, Material};
@@ -20,7 +19,7 @@ use nphysics2d::world::World;
 // use statements for stdweb
 use stdweb::web:: {
     document,
-    Window,
+    window,
     Node,
     IParentNode,
     INode,
@@ -230,14 +229,23 @@ impl Realm {
     }
     // after nphysics has computed a step, update positions of text
     // elements accordingly
-    pub fn render_step(self) {
-        for node in self.text_nodes {
+    pub fn render_step(&mut self) {
+        for node in &self.text_nodes {
             // retrieve position of rigid body wrt ground from nphysics
             // (if it exists)
             if let Some(rigid_body) = self.world.rigid_body(node.body_handle) {
                 let pos = rigid_body.position();
                 let x_pos = pos.translation.vector[0] - node.half_width;
-                let y_pos = pos.translation.vector[1] - node.half_height;
+                let y_pos = pos.translation.vector[1] + node.half_height;
+                // find height and width of body for the ground of the world
+                let body_finder = document().query_selector_all("body").unwrap();
+                let mut body_height = 0.0;
+                for body in body_finder { // should only be one body
+                    let body: HtmlElement = body.try_into().unwrap();
+                    body_height = body.offset_height() as f64;
+                }
+                // convert y pos to height
+                let top = body_height - y_pos;
                 // pos also contains object's rotation, retrieve that as matrix
                 let mut rot_mtrx = pos.rotation.to_homogeneous();
                 // nphysics convention - rot angle counterclockwise
@@ -250,24 +258,47 @@ impl Realm {
                 for &elt in rot_mtrx.iter() {
                     rot_container.push(elt);
                 }
-                // find the object and update position
-                let elt: Element = document()
-                    .query_selector(&format!(".phys-id-{}", node.id))
-                    .unwrap()
-                    .unwrap();
-                elt.set_attribute("style", &format!(
-                    "left: {}; top: {}; transform: matrix({}, {}, {}, {}, {}, {});",
+                let style = &format!(
+                    "left: {}px; top: {}px; transform: matrix({}, {}, {}, {}, {}, {});",
                     x_pos,
-                    y_pos,
+                    top,
                     rot_container[0],
                     rot_container[1],
                     rot_container[2],
                     rot_container[3],
                     rot_container[4],
                     rot_container[5],
-                )).unwrap();
+                );
+                // find the object and update position
+                let elt: Element = document()
+                    .query_selector(&format!(".phys-id-{}", node.id))
+                    .unwrap()
+                    .unwrap();
+                elt.set_attribute("style", style).unwrap();
+                // logging, track one node
+                if node.id == 1 {
+                    js! {
+                        console.log(@{style});
+                    };
+                }
             }
         }
+    }
+
+    pub fn physics_step(&mut self) {
+        self.world.step();
+    }
+
+    // logic for one step in the physics / animation world
+    fn step(mut self, _timestamp: f64) {
+        js! {
+            console.log("hey!");
+        }
+        self.physics_step();
+        self.render_step();
+        window().request_animation_frame(move |_timestamp| {
+            self.step(_timestamp);
+        });
     }
 }
 
@@ -323,6 +354,15 @@ fn perform_preprocess(obj_count: &mut u32) {
     }
 }
 
+// logic for one step in the physics / animation world
+// fn step<'a>(_timestamp: f64, realm: &'a mut Realm) {
+//     realm.world.step();
+//     realm.render_step();
+//     window().request_animation_frame(move |_timestamp| {
+//         step(_timestamp, realm);
+//     });
+// }
+
 fn main() {
     // initialize object count
     let mut obj_count: u32 = 0;
@@ -333,4 +373,16 @@ fn main() {
     }
     // create Realm
     let realm = Realm::new(obj_count);
+    // let realm_ref: &mut Realm = &mut realm;
+    let _timestamp = 0.0;
+    // closure contains logic for one step in the physics / animation world
+    // let step = |timestamp: f64, step: FnOnce<f64>| {
+    //     realm.world.step();
+    //     realm.render_step();
+    //     window().request_animation_frame(step, timestamp);
+    // };
+    // animate!
+    window().request_animation_frame(move |_timestamp| {
+        realm.step(_timestamp);
+    });
 }
