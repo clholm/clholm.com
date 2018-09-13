@@ -157,16 +157,33 @@ impl Realm {
             body_width as f64 - COLLIDER_MARGIN,
             ground_half_height - COLLIDER_MARGIN,
         )));
-        // ground is centered at (0, 0), extends from -body_width to body_width
+        // ground is centered at (0, 10px), extends from -body_width to body_width
         // second quadrant will not be used, but this allows us to pass the text
         // object's position wrt ground directly to the browser
-        let ground_pos = Isometry2::new(Vector2::zeros(), na::zero());
+        // 10px added to y because of strange CSS behavior on browser w/ scrollbar
+        let ground_pos = Isometry2::new(Vector2::y() * 10.0, na::zero());
         // add ground collider to world 
         let ground_handle = world.add_collider(
             COLLIDER_MARGIN,
             ground_shape,
             BodyHandle::ground(),
             ground_pos,
+            Material::default(),
+        );
+        // create wall that will stand at doc's left edge
+        let wall_half_width: f64 = 0.5;
+        let wall_shape = ShapeHandle::new(Cuboid::new(Vector2::new(
+            wall_half_width - COLLIDER_MARGIN,
+            body_height as f64 - COLLIDER_MARGIN,
+        )));
+        // wall is located at (0, 0) as well
+        let wall_pos = Isometry2::new(Vector2::zeros(), na::zero());
+        // add wall collider to world
+        let _wall_handle = world.add_collider(
+            COLLIDER_MARGIN,
+            wall_shape,
+            BodyHandle::ground(),
+            wall_pos,
             Material::default(),
         );
         // create vector to hold all TextNodes
@@ -259,15 +276,16 @@ impl Realm {
                     rot_container.push(elt);
                 }
                 let style = &format!(
-                    "left: {}px; top: {}px; transform: matrix({}, {}, {}, {}, {}, {});",
+                    // "left: {}px; top: {}px; transform: matrix({}, {}, {}, {}, {}, {});",
+                    "position: absolute; left: {}px; top: {}px;",
                     x_pos,
                     top,
-                    rot_container[0],
-                    rot_container[1],
-                    rot_container[2],
-                    rot_container[3],
-                    rot_container[4],
-                    rot_container[5],
+                    // rot_container[0],
+                    // rot_container[1],
+                    // rot_container[2],
+                    // rot_container[3],
+                    // rot_container[4],
+                    // rot_container[5],
                 );
                 // find the object and update position
                 let elt: Element = document()
@@ -275,25 +293,17 @@ impl Realm {
                     .unwrap()
                     .unwrap();
                 elt.set_attribute("style", style).unwrap();
-                // logging, track one node
-                if node.id == 1 {
-                    js! {
-                        console.log(@{style});
-                    };
-                }
             }
         }
     }
 
+    // access this realm's world and perform step in physics world
     pub fn physics_step(&mut self) {
         self.world.step();
     }
 
     // logic for one step in the physics / animation world
     fn step(mut self, _timestamp: f64) {
-        js! {
-            console.log("hey!");
-        }
         self.physics_step();
         self.render_step();
         window().request_animation_frame(move |_timestamp| {
@@ -354,15 +364,6 @@ fn perform_preprocess(obj_count: &mut u32) {
     }
 }
 
-// logic for one step in the physics / animation world
-// fn step<'a>(_timestamp: f64, realm: &'a mut Realm) {
-//     realm.world.step();
-//     realm.render_step();
-//     window().request_animation_frame(move |_timestamp| {
-//         step(_timestamp, realm);
-//     });
-// }
-
 fn main() {
     // initialize object count
     let mut obj_count: u32 = 0;
@@ -375,12 +376,6 @@ fn main() {
     let realm = Realm::new(obj_count);
     // let realm_ref: &mut Realm = &mut realm;
     let _timestamp = 0.0;
-    // closure contains logic for one step in the physics / animation world
-    // let step = |timestamp: f64, step: FnOnce<f64>| {
-    //     realm.world.step();
-    //     realm.render_step();
-    //     window().request_animation_frame(step, timestamp);
-    // };
     // animate!
     window().request_animation_frame(move |_timestamp| {
         realm.step(_timestamp);

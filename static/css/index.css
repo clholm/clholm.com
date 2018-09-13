@@ -9,7 +9,13 @@ html, body {
     margin-top: 0;
 }
 
+/* remove top margin from p tags to stop text from extending
+body height when spans are absolutely positioned */
+/* p {
+    margin-top: 0;
+} */
+
 /* styles for objects in Realm */
-.phys-obj {
-    position: relative;
-}
+/* .phys-obj {
+    position: absolute;
+} */
