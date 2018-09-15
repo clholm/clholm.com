@@ -20,50 +20,36 @@ use nphysics2d::world::World;
 use stdweb::web:: {
     document,
     window,
-    Node,
-    IParentNode,
     INode,
+    Node,
+    IEventTarget,
+    IParentNode,
     IElement,
     Element,
     IHtmlElement,
     HtmlElement,
 };
+use stdweb::web::event::ClickEvent;
 use stdweb::unstable::TryInto; // only used until rust::TryInto is stabilized
 use regex::Regex;
 
+// shamelessly stolen from stdweb example code who
+// shamelessly stole it from webplatform's TodoMVC example.
+macro_rules! enclose {
+    ( ($( $x:ident ),*) $y:expr ) => {
+        {
+            $(let $x = $x.clone();)*
+            $y
+        }
+    };
+}
+
 // flag for preprocess mode (will split text by whitespace and add spans)
-// todo: turn into enum if needed
 static PREPROCESS: bool = true;
 
-// STRUCTS
-// paragraph struct
-struct Paragraph {
-    // raw html that includes attributes of <p> tag
-    // ex. 
-    //  <p >
-    //      <span>hello</span> <span>world</world>
-    //  </p>
-    pub raw_html: String,
-}
+// S T R U C T S
 
-impl Paragraph {
-    // constructor, takes raw html that belongs inside <p> tag
-    // and attributes (if there are any)
-    pub fn new(attrs_option: Option<String>, html: String) -> Paragraph {
-        if let Some(attrs) = attrs_option {
-            Paragraph {
-                raw_html: format!("<p {}>\n\t{}\n</p>", attrs, html),
-            }
-        }
-        else {
-            Paragraph {
-                raw_html: format!("<p>\n\t{}\n</p>", html),
-            }
-        }
-    }
-}
-
-// struct for text that has <span>s inserted
+// text that has <span>s inserted in between whitespace
 struct ProcessedText {
     // raw html that includes inserted span tag
     // ex. 
@@ -97,9 +83,72 @@ impl ProcessedText {
     }
 }
 
-// struct that holds all information for an individual text object
+// represents Paragraph DOM element
+struct Paragraph {
+    // raw html that includes attributes of <p> tag
+    // ex. 
+    //  <p >
+    //      <span>hello</span> <span>world</world>
+    //  </p>
+    pub raw_html: String,
+}
+
+impl Paragraph {
+    // constructor, takes raw html that belongs inside <p> tag
+    // and attributes (if there are any)
+    pub fn new(attrs_option: Option<String>, html: String) -> Paragraph {
+        if let Some(attrs) = attrs_option {
+            Paragraph {
+                raw_html: format!("<p {}>\n\t{}\n</p>", attrs, html),
+            }
+        }
+        else {
+            Paragraph {
+                raw_html: format!("<p>\n\t{}\n</p>", html),
+            }
+        }
+    }
+}
+
+// represents Anchor DOM element
+struct Anchor {
+    // raw html that includes attributes of <a> tag
+    // ex.
+    // <a href="src.com" >
+    //     <span>link</span>
+    // </a>
+    pub raw_html: String,
+}
+
+impl Anchor {
+    // constructor, determines if elt has attributes
+    // and returns Anchor with properly formatted raw_html and obj_id
+    pub fn new(elt: &Element, html: String, obj_id: u32) -> Anchor {
+        if let Some(attrs) = get_attributes(elt) {
+            Anchor  {
+                raw_html: format!(
+                    "<a {}>\n\t<span class=\"phys-obj phys-id-{}\">{}</span>\n</a>",
+                    attrs,
+                    obj_id,
+                    html,
+                ),
+            }
+        }
+        else {
+            Anchor {
+                raw_html: format!(
+                    "<a>\n\t<span class=\"phys-obj phys-id-{}\">{}</span>\n</a>",
+                    obj_id,
+                    html,
+                ),
+            }
+        }
+    }
+}
+
+// struct that holds all information for an individual object
 // in the physics world (rigid body handle, collider handle)
-struct TextNode {
+struct PhysNode {
     pub body_handle: BodyHandle,
     pub collider_handle: ColliderHandle,
     pub half_width: f64,
@@ -107,15 +156,15 @@ struct TextNode {
     pub id: u32,
 }
 
-impl TextNode {
+impl PhysNode {
     // constructor
     pub fn new(
         in_body_handle: BodyHandle,
         in_collider_handle: ColliderHandle,
         in_half_width: f64,
         in_half_height: f64,
-        in_id: u32) -> TextNode {
-        TextNode {
+        in_id: u32) -> PhysNode {
+        PhysNode {
             body_handle: in_body_handle,
             collider_handle: in_collider_handle,
             half_width: in_half_width,
@@ -126,10 +175,10 @@ impl TextNode {
 }
 
 // struct Realm contains the World that drives the physics engine and the vector
-// of TextNodes that populates that World
+// of PhysNodes that populates that World
 struct Realm {
     pub world: World<f64>,
-    pub text_nodes: Vec<TextNode>,
+    pub phys_nodes: Vec<PhysNode>,
     pub ground: ColliderHandle,
 }
 
@@ -137,7 +186,7 @@ impl Realm {
     // constructs Realm by creating World struct and populating text_ndoes vec
     pub fn new(obj_count: u32) -> Realm {
         // margin that the collision engine will use
-        const COLLIDER_MARGIN: f64 = 0.01;
+        const COLLIDER_MARGIN: f64 = 0.001;
         // create nphysics world
         let mut world = World::new();
         world.set_gravity(Vector2::new(0.0, -9.81));
@@ -179,17 +228,20 @@ impl Realm {
         // wall is located at (0, 0) as well
         let wall_pos = Isometry2::new(Vector2::zeros(), na::zero());
         // add wall collider to world
-        let _wall_handle = world.add_collider(
+        world.add_collider(
             COLLIDER_MARGIN,
             wall_shape,
             BodyHandle::ground(),
             wall_pos,
             Material::default(),
         );
-        // create vector to hold all TextNodes
-        let mut text_node_vec: Vec<TextNode> = Vec::with_capacity(obj_count as usize);
-        // find each span with text and create a TextNode from it
-        for i in 0..obj_count {
+        // add phys-id-n class to button
+        let button = document().query_selector("#gravity-button").unwrap().unwrap();
+        button.set_attribute("class", &format!("phys-id-{}", obj_count)).unwrap();
+        // create vector to hold all PhysNodes
+        let mut phys_node_vec: Vec<PhysNode> = Vec::with_capacity(obj_count as usize);
+        // find each span with text and create a PhysNode from it
+        for i in 0..=obj_count {
             // retrieve object with query_selector_all, used query_selector_all
             // for type reasons, there will only be one node in the returned nodelist
             let obj_finder = document().query_selector_all(&format!(".phys-id-{}", i)).unwrap();
@@ -213,41 +265,60 @@ impl Realm {
                 obj_half_width - COLLIDER_MARGIN,
                 obj_half_height - COLLIDER_MARGIN,
             )));
-            let inertia = shape.inertia(1.0);
-            let center_of_mass = shape.center_of_mass();
             let pos = Isometry2::new(Vector2::new(x_pos, y_pos), 0.0);
-            // add rigid body to world
-            let body_handle = world.add_rigid_body(pos, inertia, center_of_mass);
-            // add collider to world and attach to above rigid body
-            let collider_handle = world.add_collider(
-                COLLIDER_MARGIN,
-                shape,
-                body_handle,
-                Isometry2::identity(),
-                Material::default(),
-            );
-            // create a text node from this object and push it into the text_node_vec
-            text_node_vec.push(
-                TextNode::new(
+            // if object is not button, it isn't fixed in place
+            if i != obj_count {
+                let inertia = shape.inertia(1.0);
+                let center_of_mass = shape.center_of_mass();
+                // add rigid body to world
+                let body_handle = world.add_rigid_body(pos, inertia, center_of_mass);
+                // add collider to world and attach to above rigid body
+                let collider_handle = world.add_collider(
+                    COLLIDER_MARGIN,
+                    shape,
                     body_handle,
-                    collider_handle,
-                    obj_half_width,
-                    obj_half_height,
-                    i
-                )
-            );
+                    Isometry2::identity(),
+                    Material::default(),
+                );
+                // create a phys node from this object and push it into the phys_node_vec
+                phys_node_vec.push(
+                    PhysNode::new(
+                        body_handle,
+                        collider_handle,
+                        obj_half_width,
+                        obj_half_height,
+                        i
+                    )
+                );
+            }
+            // button is fixed in place (thus the use of the ground handle)
+            else {
+                world.add_collider(
+                    COLLIDER_MARGIN,
+                    shape,
+                    BodyHandle::ground(),
+                    pos,
+                    Material::default(),
+                );
+                // fix in place with style as well
+                button.set_attribute("style", &format!(
+                    "position: absolute; left: {}px; top: {}px;",
+                    left,
+                    top,
+                )).unwrap();
+            }
         }
         // build and return the Realm!
         Realm {
             world: world,
-            text_nodes: text_node_vec,
+            phys_nodes: phys_node_vec,
             ground: ground_handle,
         }
     }
     // after nphysics has computed a step, update positions of text
     // elements accordingly
     pub fn render_step(&mut self) {
-        for node in &self.text_nodes {
+        for node in &self.phys_nodes {
             // retrieve position of rigid body wrt ground from nphysics
             // (if it exists)
             if let Some(rigid_body) = self.world.rigid_body(node.body_handle) {
@@ -312,12 +383,21 @@ impl Realm {
     }
 }
 
-// returns <p> with <span>s inserted
+// returns <p> with <span>s inserted between whitespace
 fn formatted_paragraph_factory(
     attrs: Option<String>,
     html: String,
     obj_count: &mut u32) -> Paragraph {
     Paragraph::new(attrs, ProcessedText::new(html, obj_count).raw_html)
+}
+
+// returns <a> with <span>s inserted
+// also increments obj_count
+fn formatted_anchor_factory(elt: &Element, html: String, obj_count: &mut u32) -> Anchor {
+    // variable to hold old obj_count
+    let old_obj_count = *obj_count;
+    *obj_count += 1;
+    Anchor::new(&elt, html, old_obj_count)
 }
 
 // returns attributes of a elt as a string option
@@ -362,6 +442,24 @@ fn perform_preprocess(obj_count: &mut u32) {
         let parent: Node = paragraph.parent_node().unwrap();
         parent.replace_child(&repl_node, &paragraph).unwrap();
     }
+    // find all anchor tags
+    let anchors = document().query_selector_all("a").unwrap();
+    for anchor in &anchors {
+        // retrieve text from anchor
+        let anchor_text = anchor.text_content().unwrap();
+        // retrieve anchor as Element
+        let anchor: Element = anchor.try_into().unwrap();
+        let replacement_anch: Anchor = formatted_anchor_factory(
+            &anchor,
+            anchor_text,
+            obj_count
+        );
+        // create node from raw html
+        let repl_node: Node = Node::from_html(&replacement_anch.raw_html).unwrap();
+        // find parent and replace this node
+        let parent: Node = anchor.parent_node().unwrap();
+        parent.replace_child(&repl_node, &anchor).unwrap();
+    }
 }
 
 fn main() {
@@ -374,10 +472,14 @@ fn main() {
     }
     // create Realm
     let realm = Realm::new(obj_count);
-    // let realm_ref: &mut Realm = &mut realm;
     let _timestamp = 0.0;
     // animate!
     window().request_animation_frame(move |_timestamp| {
         realm.step(_timestamp);
     });
+    // add event listener to button, when clicked will begin animation
+    // let button = document().query_selector("#gravity-button").unwrap().unwrap();
+    // button.add_event_listener(enclose!( (animate) move |_: ClickEvent| {
+    //     animate.();
+    // }));
 }
