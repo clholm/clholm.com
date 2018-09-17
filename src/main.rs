@@ -1,6 +1,5 @@
 #![feature(type_ascription)]
 
-#[macro_use]
 extern crate stdweb;
 extern crate regex;
 extern crate nalgebra as na;
@@ -32,17 +31,6 @@ use stdweb::web:: {
 use stdweb::web::event::ClickEvent;
 use stdweb::unstable::TryInto; // only used until rust::TryInto is stabilized
 use regex::Regex;
-
-// shamelessly stolen from stdweb example code who
-// shamelessly stole it from webplatform's TodoMVC example.
-macro_rules! enclose {
-    ( ($( $x:ident ),*) $y:expr ) => {
-        {
-            $(let $x = $x.clone();)*
-            $y
-        }
-    };
-}
 
 // flag for preprocess mode (will split text by whitespace and add spans)
 static PREPROCESS: bool = true;
@@ -189,7 +177,7 @@ impl Realm {
         const COLLIDER_MARGIN: f64 = 0.001;
         // create nphysics world
         let mut world = World::new();
-        world.set_gravity(Vector2::new(0.0, -9.81));
+        world.set_gravity(Vector2::new(0.0, -470.00));
         // find height and width of body for the ground of the world
         let body_finder = document().query_selector_all("body").unwrap();
         let mut body_height = 0.0;
@@ -201,7 +189,7 @@ impl Realm {
         }
         // create ground object in physics world
         // create ground shape handle
-        let ground_half_height: f64 = 0.5;
+        let ground_half_height: f64 = 5.0;
         let ground_shape = ShapeHandle::new(Cuboid::new(Vector2::new(
             body_width as f64 - COLLIDER_MARGIN,
             ground_half_height - COLLIDER_MARGIN,
@@ -470,16 +458,16 @@ fn main() {
     if PREPROCESS {
         perform_preprocess(&mut obj_count);
     }
-    // create Realm
-    let realm = Realm::new(obj_count);
-    let _timestamp = 0.0;
-    // animate!
-    window().request_animation_frame(move |_timestamp| {
-        realm.step(_timestamp);
-    });
     // add event listener to button, when clicked will begin animation
-    // let button = document().query_selector("#gravity-button").unwrap().unwrap();
-    // button.add_event_listener(enclose!( (animate) move |_: ClickEvent| {
-    //     animate.();
-    // }));
+    // construct realm here, not great practice
+    let button = document().query_selector("#gravity-button").unwrap().unwrap();
+    button.add_event_listener(move |_: ClickEvent| {
+        // create Realm
+        let realm = Realm::new(obj_count);
+        let _timestamp = 0.0;
+        // animate!
+        window().request_animation_frame(move |_timestamp| {
+            realm.step(_timestamp);
+        });
+    });
 }

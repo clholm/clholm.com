@@ -1,21 +1,83 @@
 html, body {
     height: 100vh;
     width: 100vw;
-    margin: 0;
     padding: 0;
+    margin: 0;
+    background-color: #FAFAFA;
 }
 
-#top-text {
-    margin-top: 0;
+#content-wrapper {
+    margin: 0 auto;
+    max-width: 600px;
 }
 
-/* remove top margin from p tags to stop text from extending
-body height when spans are absolutely positioned */
-/* p {
-    margin-top: 0;
-} */
+#top-text, .name {
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 800;
+    font-size: 1.3em;
+    font-style: italic;
+    display: inline;
+}
 
-/* styles for objects in Realm */
-/* .phys-obj {
-    position: absolute;
-} */
+p {
+    color: #444444;
+    font-family: 'Open Sans', sans-serif;
+}
+
+.name {
+    display: inline;
+    font-style: normal;
+    font-weight: 800;
+}
+
+.dash {
+    display: inline;
+    color: #444444;
+    font-size: 1.2em;
+}
+
+.link-list-head {
+    font-weight: 700;
+}
+
+button {
+    cursor: pointer;
+    position: relative;
+    left: 35px;
+    display: inline-block;
+    border: none;
+    padding: 7px;
+    margin: 0;
+    font-family: 'Open Sans', sans-serif;
+    font-size: .9em;
+    text-decoration: none;
+    background: #EB1828;
+    color: #FAFAFA;
+    cursor: pointer;
+    text-align: center;
+}
+
+button:hover,
+button:focus {
+    background: #DD1320;
+}
+
+button:focus {
+    outline: none;
+}
+
+a {
+    padding-right: 0;
+    text-decoration: none;
+    color: #0063AA;
+    font-family: 'Open Sans', sans-serif;
+    font-weight: 700;
+}
+
+a:visted {
+   color: #0063AA; 
+}
+
+a:hover {
+    color: #DD1320;
+}
