@@ -322,29 +322,11 @@ impl Realm {
                 }
                 // convert y pos to height
                 let top = body_height - y_pos;
-                // pos also contains object's rotation, retrieve that as matrix
-                let mut rot_mtrx = pos.rotation.to_homogeneous();
-                // nphysics convention - rot angle counterclockwise
-                // browser convention - rot angle clockwise
-                // swap (0, 1) and (1, 0) cells in matrix to convert nphysics
-                // rotation matrix to browser rotation matrix
-                rot_mtrx.swap((0, 1), (1, 0));
-                // iterate through matrix, retrieve values to pass to browser
-                let mut rot_container: Vec<f64> = Vec::with_capacity(6);
-                for &elt in rot_mtrx.iter() {
-                    rot_container.push(elt);
-                }
                 let style = &format!(
-                    // "left: {}px; top: {}px; transform: matrix({}, {}, {}, {}, {}, {});",
+                    // "left: {}px; top: {}px;",
                     "position: absolute; left: {}px; top: {}px;",
                     x_pos,
-                    top,
-                    // rot_container[0],
-                    // rot_container[1],
-                    // rot_container[2],
-                    // rot_container[3],
-                    // rot_container[4],
-                    // rot_container[5],
+                    top
                 );
                 // find the object and update position
                 let elt: Element = document()
